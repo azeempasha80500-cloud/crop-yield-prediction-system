@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import joblib
 import os
+import json
 
 from sklearn.preprocessing import LabelEncoder
 from sklearn.ensemble import RandomForestRegressor
@@ -13,8 +14,10 @@ app = Flask(__name__)
 MODEL_FILE = "crop_model.pkl"
 ENCODER_FILE = "encoders.pkl"
 
+global_df = None
+
 # =========================================================
-# HTML PAGE
+# HTML TEMPLATE
 # =========================================================
 
 HTML = '''
@@ -29,6 +32,8 @@ HTML = '''
 
     <title>Crop Yield Prediction</title>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 
     <style>
@@ -36,19 +41,20 @@ HTML = '''
         body{
             background: linear-gradient(135deg,#d4fc79,#96e6a1);
             min-height:100vh;
-            display:flex;
-            justify-content:center;
-            align-items:center;
-            font-family:Arial;
-            padding:20px;
+            font-family: Arial, sans-serif;
+            padding:40px 15px;
         }
 
-        .container-box{
-            width:700px;
+        .main-container{
+            max-width:1200px;
+            margin:auto;
+        }
+
+        .card-box{
             background:white;
-            padding:40px;
+            padding:30px;
             border-radius:25px;
-            box-shadow:0px 15px 35px rgba(0,0,0,0.2);
+            box-shadow:0px 15px 35px rgba(0,0,0,0.15);
             animation:fadeIn 1s ease;
         }
 
@@ -63,19 +69,13 @@ HTML = '''
         .form-control{
             padding:14px;
             border-radius:12px;
-            transition:0.3s;
-        }
-
-        .form-control:focus{
-            transform:scale(1.02);
-            box-shadow:0 0 10px rgba(25,135,84,0.3);
         }
 
         .btn-custom{
             width:100%;
             padding:14px;
             border:none;
-            border-radius:14px;
+            border-radius:12px;
             background:#198754;
             color:white;
             font-size:18px;
@@ -84,36 +84,29 @@ HTML = '''
         }
 
         .btn-custom:hover{
-            transform:translateY(-3px);
             background:#157347;
+            transform:translateY(-3px);
         }
 
         .result{
-            margin-top:30px;
-            padding:20px;
+            margin-top:25px;
             background:#d1e7dd;
-            border-radius:15px;
-            text-align:center;
-            animation:popUp 0.6s ease;
-        }
-
-        .result h2{
-            color:#0f5132;
-            font-weight:bold;
-        }
-
-        .upload-box{
-            margin-bottom:25px;
             padding:20px;
-            border:2px dashed #198754;
             border-radius:15px;
-            background:#f8f9fa;
+            text-align:center;
+            animation:popUp 0.5s ease;
         }
 
-        .footer{
-            text-align:center;
-            margin-top:20px;
-            color:gray;
+        .chart-box{
+            margin-top:30px;
+            background:white;
+            padding:25px;
+            border-radius:20px;
+            box-shadow:0px 10px 25px rgba(0,0,0,0.1);
+        }
+
+        canvas{
+            max-height:450px;
         }
 
         @keyframes fadeIn{
@@ -155,13 +148,13 @@ HTML = '''
 
 <body>
 
-<div class="container-box">
+<div class="main-container">
 
-    <h1>Crop Yield Prediction</h1>
+    <div class="card-box">
 
-    <!-- Upload Dataset -->
+        <h1>Crop Yield Prediction</h1>
 
-    <div class="upload-box">
+        <!-- Upload Dataset -->
 
         <form action="/upload" method="POST" enctype="multipart/form-data">
 
@@ -184,82 +177,147 @@ HTML = '''
 
         </form>
 
+        <hr class="my-4">
+
+        <!-- Prediction Form -->
+
+        <form action="/predict" method="POST">
+
+            <div class="row">
+
+                <div class="col-md-6 mb-3">
+                    <input type="text"
+                           name="state"
+                           class="form-control"
+                           placeholder="Enter State"
+                           required>
+                </div>
+
+                <div class="col-md-6 mb-3">
+                    <input type="text"
+                           name="crop"
+                           class="form-control"
+                           placeholder="Enter Crop"
+                           required>
+                </div>
+
+                <div class="col-md-6 mb-3">
+                    <input type="number"
+                           name="year"
+                           class="form-control"
+                           placeholder="Enter Year"
+                           required>
+                </div>
+
+                <div class="col-md-6 mb-3">
+                    <input type="number"
+                           step="0.01"
+                           name="area"
+                           class="form-control"
+                           placeholder="Enter Area"
+                           required>
+                </div>
+
+            </div>
+
+            <button type="submit" class="btn-custom">
+                Predict Yield
+            </button>
+
+        </form>
+
+        {% if prediction %}
+
+        <div class="result">
+
+            <h2>Predicted Yield</h2>
+
+            <h3>{{ prediction }} Kg/Hectare</h3>
+
+        </div>
+
+        {% endif %}
+
+        {% if message %}
+
+        <div class="result">
+
+            <h3>{{ message }}</h3>
+
+        </div>
+
+        {% endif %}
+
     </div>
 
-    <!-- Prediction Form -->
+    <!-- CHARTS -->
 
-    <form action="/predict" method="POST">
+    {% if chart_labels %}
 
-        <div class="mb-3">
-            <input type="text"
-                   name="state"
-                   class="form-control"
-                   placeholder="Enter State"
-                   required>
-        </div>
+    <div class="chart-box">
 
-        <div class="mb-3">
-            <input type="text"
-                   name="crop"
-                   class="form-control"
-                   placeholder="Enter Crop"
-                   required>
-        </div>
+        <h3 class="text-center mb-4">
+            State Wise Crop Distribution
+        </h3>
 
-        <div class="mb-3">
-            <input type="number"
-                   name="year"
-                   class="form-control"
-                   placeholder="Enter Year"
-                   required>
-        </div>
-
-        <div class="mb-3">
-            <input type="number"
-                   step="0.01"
-                   name="area"
-                   class="form-control"
-                   placeholder="Enter Area"
-                   required>
-        </div>
-
-        <button type="submit" class="btn-custom">
-            Predict Yield
-        </button>
-
-    </form>
-
-    <!-- Prediction Result -->
-
-    {% if prediction %}
-
-    <div class="result">
-
-        <h2>Predicted Yield</h2>
-
-        <h3>{{ prediction }} Kg/Hectare</h3>
+        <canvas id="cropChart"></canvas>
 
     </div>
 
     {% endif %}
-
-    <!-- Message -->
-
-    {% if message %}
-
-    <div class="result">
-
-        <h3>{{ message }}</h3>
-
-    </div>
-
-    {% endif %}
-
-    <div class="footer">
-        Machine Learning Based Agriculture Prediction System
-    </div>
 
 </div>
+
+<script>
+
+    const labels = {{ chart_labels|safe if chart_labels else '[]' }};
+    const values = {{ chart_values|safe if chart_values else '[]' }};
+
+    if(labels.length > 0){
+
+        const ctx = document.getElementById('cropChart');
+
+        new Chart(ctx, {
+
+            type: 'bar',
+
+            data: {
+
+                labels: labels,
+
+                datasets: [{
+
+                    label: 'Number of Crops',
+
+                    data: values,
+
+                    borderWidth: 2
+
+                }]
+
+            },
+
+            options: {
+
+                responsive: true,
+
+                plugins: {
+
+                    legend: {
+
+                        display: true
+
+                    }
+
+                }
+
+            }
+
+        });
+
+    }
+
+</script>
 
 </body>
 </html>
@@ -276,11 +334,13 @@ def home():
     return render_template_string(HTML)
 
 # =========================================================
-# UPLOAD DATASET & TRAIN MODEL
+# UPLOAD DATASET
 # =========================================================
 
 @app.route('/upload', methods=['POST'])
 def upload():
+
+    global global_df
 
     try:
 
@@ -296,7 +356,9 @@ def upload():
         # Read CSV
         df = pd.read_csv(file)
 
-        # Clean column names
+        global_df = df.copy()
+
+        # Clean columns
         df.columns = df.columns.str.strip()
 
         # Rename columns
@@ -306,7 +368,7 @@ def upload():
             "Yield (UOM:Kg/Ha(KilogramperHectare)), Scaling Factor:1": "Yield"
         })
 
-        # Drop unnecessary columns
+        # Drop unwanted columns
         drop_cols = [
             "Country",
             "Additional Info",
@@ -324,13 +386,12 @@ def upload():
 
         df["Year"] = df["Year"].astype(int)
 
-        # Remove nulls
         df = df.dropna()
 
         # Remove outliers
         df = df[df["Yield"] < df["Yield"].quantile(0.97)]
 
-        # Label Encoding
+        # Label encoding
         state_encoder = LabelEncoder()
         crop_encoder = LabelEncoder()
 
@@ -344,7 +405,7 @@ def upload():
         # Target
         y = df["Yield"]
 
-        # Train test split
+        # Train split
         X_train, X_test, y_train, y_test = train_test_split(
             X,
             y,
@@ -359,7 +420,7 @@ def upload():
             random_state=42
         )
 
-        # Train model
+        # Train
         model.fit(X_train, y_train)
 
         # Save model
@@ -371,9 +432,21 @@ def upload():
             "crop_encoder": crop_encoder
         }, ENCODER_FILE)
 
+        # =========================
+        # CHART DATA
+        # =========================
+
+        chart_data = global_df.groupby("State")["Crop Name"].count().sort_values(ascending=False).head(10)
+
+        chart_labels = list(chart_data.index)
+
+        chart_values = list(chart_data.values)
+
         return render_template_string(
             HTML,
-            message="Dataset Uploaded & Model Trained Successfully"
+            message="Dataset Uploaded & Model Trained Successfully",
+            chart_labels=json.dumps(chart_labels),
+            chart_values=json.dumps(chart_values)
         )
 
     except Exception as e:
@@ -384,7 +457,7 @@ def upload():
         )
 
 # =========================================================
-# PREDICT
+# PREDICTION
 # =========================================================
 
 @app.route('/predict', methods=['POST'])
@@ -392,7 +465,6 @@ def predict():
 
     try:
 
-        # Check model exists
         if not os.path.exists(MODEL_FILE):
 
             return render_template_string(
@@ -403,37 +475,38 @@ def predict():
         # Load model
         model = joblib.load(MODEL_FILE)
 
-        # Load encoders
         encoders = joblib.load(ENCODER_FILE)
 
         state_encoder = encoders["state_encoder"]
+
         crop_encoder = encoders["crop_encoder"]
 
-        # Get values
+        # Inputs
         state = request.form['state'].strip()
+
         crop = request.form['crop'].strip()
 
         year = int(request.form['year'])
 
         area = float(request.form['area'])
 
-        # Check state exists
+        # Check state
         if state not in state_encoder.classes_:
 
             return render_template_string(
                 HTML,
-                message=f"State '{state}' not found in dataset"
+                message=f"State '{state}' not found"
             )
 
-        # Check crop exists
+        # Check crop
         if crop not in crop_encoder.classes_:
 
             return render_template_string(
                 HTML,
-                message=f"Crop '{crop}' not found in dataset"
+                message=f"Crop '{crop}' not found"
             )
 
-        # Encode values
+        # Encode
         state_encoded = state_encoder.transform([state])[0]
 
         crop_encoded = crop_encoder.transform([crop])[0]
@@ -443,12 +516,21 @@ def predict():
             [state_encoded, crop_encoded, year, area]
         ])
 
-        # Prediction
+        # Predict
         prediction = model.predict(features)[0]
+
+        # Mini Map Data
+        chart_data = global_df.groupby("State")["Crop Name"].count().sort_values(ascending=False).head(10)
+
+        chart_labels = list(chart_data.index)
+
+        chart_values = list(chart_data.values)
 
         return render_template_string(
             HTML,
-            prediction=round(float(prediction), 2)
+            prediction=round(float(prediction), 2),
+            chart_labels=json.dumps(chart_labels),
+            chart_values=json.dumps(chart_values)
         )
 
     except Exception as e:
