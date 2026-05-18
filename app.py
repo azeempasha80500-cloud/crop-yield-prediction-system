@@ -250,7 +250,7 @@ HTML = '''
 
     </div>
 
-    <!-- CHARTS -->
+    <!-- Chart Section -->
 
     {% if chart_labels %}
 
@@ -287,7 +287,7 @@ HTML = '''
 
                 datasets: [{
 
-                    label: 'Number of Crops',
+                    label: 'Crop Count',
 
                     data: values,
 
@@ -334,7 +334,7 @@ def home():
     return render_template_string(HTML)
 
 # =========================================================
-# UPLOAD DATASET
+# UPLOAD DATASET & TRAIN MODEL
 # =========================================================
 
 @app.route('/upload', methods=['POST'])
@@ -353,7 +353,7 @@ def upload():
                 message="No file uploaded"
             )
 
-        # Read CSV
+        # Read dataset
         df = pd.read_csv(file)
 
         global_df = df.copy()
@@ -386,13 +386,30 @@ def upload():
 
         df["Year"] = df["Year"].astype(int)
 
+        # Numeric conversion
+        df["Area"] = pd.to_numeric(df["Area"], errors='coerce')
+
+        df["Yield"] = pd.to_numeric(df["Yield"], errors='coerce')
+
+        # Remove nulls
         df = df.dropna()
 
-        # Remove outliers
-        df = df[df["Yield"] < df["Yield"].quantile(0.97)]
+        # Remove outliers only if enough rows exist
+        if len(df) > 50:
 
-        # Label encoding
+            df = df[df["Yield"] < df["Yield"].quantile(0.97)]
+
+        # Check minimum rows
+        if len(df) < 10:
+
+            return render_template_string(
+                HTML,
+                message="Dataset too small after cleaning"
+            )
+
+        # Label Encoding
         state_encoder = LabelEncoder()
+
         crop_encoder = LabelEncoder()
 
         df["State"] = state_encoder.fit_transform(df["State"])
@@ -405,7 +422,7 @@ def upload():
         # Target
         y = df["Yield"]
 
-        # Train split
+        # Split data
         X_train, X_test, y_train, y_test = train_test_split(
             X,
             y,
@@ -415,8 +432,8 @@ def upload():
 
         # Model
         model = RandomForestRegressor(
-            n_estimators=200,
-            max_depth=15,
+            n_estimators=100,
+            max_depth=10,
             random_state=42
         )
 
@@ -432,11 +449,11 @@ def upload():
             "crop_encoder": crop_encoder
         }, ENCODER_FILE)
 
-        # =========================
-        # CHART DATA
-        # =========================
-
-        chart_data = global_df.groupby("State")["Crop Name"].count().sort_values(ascending=False).head(10)
+        # Chart Data
+        chart_data = global_df.groupby("State")["Crop Name"] \
+                              .count() \
+                              .sort_values(ascending=False) \
+                              .head(10)
 
         chart_labels = list(chart_data.index)
 
@@ -457,11 +474,13 @@ def upload():
         )
 
 # =========================================================
-# PREDICTION
+# PREDICT
 # =========================================================
 
 @app.route('/predict', methods=['POST'])
 def predict():
+
+    global global_df
 
     try:
 
@@ -475,6 +494,7 @@ def predict():
         # Load model
         model = joblib.load(MODEL_FILE)
 
+        # Load encoders
         encoders = joblib.load(ENCODER_FILE)
 
         state_encoder = encoders["state_encoder"]
@@ -490,20 +510,20 @@ def predict():
 
         area = float(request.form['area'])
 
-        # Check state
+        # Validate state
         if state not in state_encoder.classes_:
 
             return render_template_string(
                 HTML,
-                message=f"State '{state}' not found"
+                message=f"State '{state}' not found in dataset"
             )
 
-        # Check crop
+        # Validate crop
         if crop not in crop_encoder.classes_:
 
             return render_template_string(
                 HTML,
-                message=f"Crop '{crop}' not found"
+                message=f"Crop '{crop}' not found in dataset"
             )
 
         # Encode
@@ -519,8 +539,11 @@ def predict():
         # Predict
         prediction = model.predict(features)[0]
 
-        # Mini Map Data
-        chart_data = global_df.groupby("State")["Crop Name"].count().sort_values(ascending=False).head(10)
+        # Chart Data
+        chart_data = global_df.groupby("State")["Crop Name"] \
+                              .count() \
+                              .sort_values(ascending=False) \
+                              .head(10)
 
         chart_labels = list(chart_data.index)
 
