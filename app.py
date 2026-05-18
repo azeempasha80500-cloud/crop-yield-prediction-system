@@ -250,7 +250,7 @@ HTML = '''
 
     </div>
 
-    <!-- Chart -->
+    <!-- CHART -->
 
     {% if chart_labels %}
 
@@ -379,14 +379,14 @@ def upload():
 
         df = df.drop(columns=drop_cols, errors='ignore')
 
-        # FIXED YEAR REGEX
+        # Clean year
         df["Year"] = df["Year"].astype(str).str.extract(r'(\d{4})')
 
         df = df.dropna(subset=["Year"])
 
         df["Year"] = df["Year"].astype(int)
 
-        # Convert numeric values
+        # Convert numeric columns
         df["Area"] = pd.to_numeric(df["Area"], errors='coerce')
 
         df["Yield"] = pd.to_numeric(df["Yield"], errors='coerce')
@@ -400,8 +400,6 @@ def upload():
             q = df["Yield"].quantile(0.99)
 
             df = df[df["Yield"] <= q]
-
-        print("Rows after cleaning:", len(df))
 
         # Label Encoding
         state_encoder = LabelEncoder()
@@ -451,9 +449,9 @@ def upload():
                               .sort_values(ascending=False) \
                               .head(10)
 
-        chart_labels = list(chart_data.index)
+        chart_labels = [str(x) for x in chart_data.index]
 
-        chart_values = list(chart_data.values)
+        chart_values = [int(x) for x in chart_data.values]
 
         return render_template_string(
             HTML,
@@ -541,9 +539,9 @@ def predict():
                               .sort_values(ascending=False) \
                               .head(10)
 
-        chart_labels = list(chart_data.index)
+        chart_labels = [str(x) for x in chart_data.index]
 
-        chart_values = list(chart_data.values)
+        chart_values = [int(x) for x in chart_data.values]
 
         return render_template_string(
             HTML,
