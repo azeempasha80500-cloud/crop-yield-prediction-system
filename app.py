@@ -250,7 +250,7 @@ HTML = '''
 
     </div>
 
-    <!-- Chart Section -->
+    <!-- Chart -->
 
     {% if chart_labels %}
 
@@ -334,7 +334,7 @@ def home():
     return render_template_string(HTML)
 
 # =========================================================
-# UPLOAD DATASET & TRAIN MODEL
+# UPLOAD DATASET
 # =========================================================
 
 @app.route('/upload', methods=['POST'])
@@ -353,7 +353,7 @@ def upload():
                 message="No file uploaded"
             )
 
-        # Read dataset
+        # Read CSV
         df = pd.read_csv(file)
 
         global_df = df.copy()
@@ -379,33 +379,29 @@ def upload():
 
         df = df.drop(columns=drop_cols, errors='ignore')
 
-        # Clean year
-        df["Year"] = df["Year"].astype(str).str.extract(r'(\\d{4})')
+        # FIXED YEAR REGEX
+        df["Year"] = df["Year"].astype(str).str.extract(r'(\d{4})')
 
         df = df.dropna(subset=["Year"])
 
         df["Year"] = df["Year"].astype(int)
 
-        # Numeric conversion
+        # Convert numeric values
         df["Area"] = pd.to_numeric(df["Area"], errors='coerce')
 
         df["Yield"] = pd.to_numeric(df["Yield"], errors='coerce')
 
-        # Remove nulls
+        # Remove null values
         df = df.dropna()
 
-        # Remove outliers only if enough rows exist
-        if len(df) > 50:
+        # Remove outliers safely
+        if len(df) > 100:
 
-            df = df[df["Yield"] < df["Yield"].quantile(0.97)]
+            q = df["Yield"].quantile(0.99)
 
-        # Check minimum rows
-        if len(df) < 10:
+            df = df[df["Yield"] <= q]
 
-            return render_template_string(
-                HTML,
-                message="Dataset too small after cleaning"
-            )
+        print("Rows after cleaning:", len(df))
 
         # Label Encoding
         state_encoder = LabelEncoder()
@@ -422,7 +418,7 @@ def upload():
         # Target
         y = df["Yield"]
 
-        # Split data
+        # Train Test Split
         X_train, X_test, y_train, y_test = train_test_split(
             X,
             y,
@@ -437,7 +433,7 @@ def upload():
             random_state=42
         )
 
-        # Train
+        # Train model
         model.fit(X_train, y_train)
 
         # Save model
