@@ -1,4 +1,131 @@
 from flask import Flask, request, render_template_string
+from flask import Flask, request, render_template_string
+
+app = Flask(__name__)
+
+# ================= LOGIN PAGE =================
+
+LOGIN_HTML = '''
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Crop Yield Prediction - Login</title>
+    <style>
+        body{
+            background: linear-gradient(135deg,#d4fc79,#96e6a1);
+            display:flex;
+            justify-content:center;
+            align-items:center;
+            height:100vh;
+            font-family:Arial, sans-serif;
+        }
+
+        .login-box{
+            background:white;
+            padding:40px;
+            width:350px;
+            border-radius:20px;
+            box-shadow:0px 10px 25px rgba(0,0,0,0.2);
+            text-align:center;
+        }
+
+        h1{
+            color:#198754;
+            margin-bottom:20px;
+        }
+
+        input{
+            width:100%;
+            padding:12px;
+            margin:10px 0;
+            border:1px solid #ccc;
+            border-radius:10px;
+            box-sizing:border-box;
+        }
+
+        button{
+            width:100%;
+            padding:12px;
+            background:#198754;
+            color:white;
+            border:none;
+            border-radius:10px;
+            font-size:16px;
+            cursor:pointer;
+        }
+
+        button:hover{
+            background:#157347;
+        }
+
+        .error{
+            color:red;
+            margin-top:15px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="login-box">
+    <h1>Crop Yield Prediction</h1>
+
+    <form method="POST" action="/login">
+        <input type="text"
+               name="username"
+               placeholder="Enter Username"
+               required>
+
+        <input type="password"
+               name="password"
+               placeholder="Enter Password"
+               required>
+
+        <button type="submit">Login</button>
+    </form>
+
+    {% if message %}
+        <div class="error">
+            {{ message }}
+        </div>
+    {% endif %}
+</div>
+
+</body>
+</html>
+'''
+
+# ================= YOUR EXISTING CROP PAGE =================
+# Paste your HTML variable here
+
+HTML = '''
+<!-- Paste your existing Crop Yield Prediction HTML here -->
+'''
+
+# ================= ROUTES =================
+
+@app.route('/')
+def home():
+    return render_template_string(LOGIN_HTML)
+
+@app.route('/login', methods=['POST'])
+def login():
+    username = request.form['username']
+    password = request.form['password']
+
+    # Default login credentials
+    if username == "admin" and password == "admin123":
+        return render_template_string(HTML)
+    else:
+        return render_template_string(
+            LOGIN_HTML,
+            message="Invalid Username or Password"
+        )
+
+if __name__ == '__main__':
+    app.run(debug=True)
+
+
+
 import pandas as pd
 import numpy as np
 import joblib
