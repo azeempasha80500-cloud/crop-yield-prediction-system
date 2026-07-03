@@ -1,19 +1,144 @@
-from flask import Flask, request, render_template_stringimport pandas as pdimport numpy as npimport joblibimport osimport json
+from flask import Flask, request, render_template_string
+import pandas as pd
+import numpy as np
+import joblib
+import os
+import json
+from sklearn.preprocessing import LabelEncoder
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
 
-from sklearn.preprocessing import LabelEncoderfrom sklearn.ensemble import RandomForestRegressorfrom sklearn.model_selection import train_test_split
+app = Flask(__name__)
 
-app = Flask(name)
+# =========================================================
+# LOGIN PAGE
+# =========================================================
 
-MODEL_FILE = "crop_model.pkl"ENCODER_FILE = "encoders.pkl"
+LOGIN_HTML = '''
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Crop Yield Prediction - Login</title>
 
-global_df = None
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 
-=========================================================
+    <style>
+        body{
+            background: linear-gradient(135deg,#d4fc79,#96e6a1);
+            height:100vh;
+            display:flex;
+            justify-content:center;
+            align-items:center;
+            font-family:Arial,sans-serif;
+        }
 
-HTML TEMPLATE
+        .login-box{
+            width:400px;
+            background:white;
+            padding:40px;
+            border-radius:25px;
+            box-shadow:0px 15px 35px rgba(0,0,0,0.15);
+        }
 
-=========================================================
+        h1{
+            text-align:center;
+            color:#198754;
+            margin-bottom:30px;
+        }
 
+        .form-control{
+            padding:14px;
+            border-radius:12px;
+            margin-bottom:20px;
+        }
+
+        .btn-custom{
+            width:100%;
+            padding:14px;
+            border:none;
+            border-radius:12px;
+            background:#198754;
+            color:white;
+            font-size:18px;
+            font-weight:bold;
+        }
+
+        .btn-custom:hover{
+            background:#157347;
+        }
+
+        .error{
+            color:red;
+            text-align:center;
+            margin-top:15px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="login-box">
+
+    <h1>Crop Yield Prediction</h1>
+
+    <form action="/login" method="POST">
+
+        <input type="text"
+               name="username"
+               class="form-control"
+               placeholder="Enter Username"
+               required>
+
+        <input type="password"
+               name="password"
+               class="form-control"
+               placeholder="Enter Password"
+               required>
+
+        <button type="submit" class="btn-custom">
+            Login
+        </button>
+
+    </form>
+
+    {% if message %}
+        <div class="error">
+            {{ message }}
+        </div>
+    {% endif %}
+
+</div>
+
+</body>
+</html>
+'''
+
+# =========================================================
+# HOME (SHOW LOGIN PAGE FIRST)
+# =========================================================
+
+@app.route('/')
+def home():
+    return render_template_string(LOGIN_HTML)
+
+# =========================================================
+# LOGIN
+# =========================================================
+
+@app.route('/login', methods=['POST'])
+def login():
+
+    username = request.form['username']
+    password = request.form['password']
+
+    # Default Login Credentials
+    if username == "admin" and password == "admin123":
+        return render_template_string(HTML)
+
+    return render_template_string(
+        LOGIN_HTML,
+        message="Invalid Username or Password"
+    )
 HTML = '''
 
 <!DOCTYPE html>
